@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Install GizmoSQL</title>
+  <meta name="description" content="One-line installer for GizmoSQL — a high-performance Flight SQL server built on DuckDB.">
+  <link rel="canonical" href="https://gizmodata.com/gizmosql/install">
+  <style>
+    :root {
+      --fg: #0f172a;
+      --muted: #64748b;
+      --bg: #ffffff;
+      --code-bg: #0f172a;
+      --code-fg: #f1f5f9;
+      --accent: #2563eb;
+      --border: #e2e8f0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #f1f5f9;
+        --muted: #94a3b8;
+        --bg: #0f172a;
+        --code-bg: #020617;
+        --code-fg: #e2e8f0;
+        --accent: #60a5fa;
+        --border: #1e293b;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      margin: 0;
+      padding: 2rem 1rem;
+      max-width: 760px;
+      margin-inline: auto;
+    }
+    h1 { margin: 0 0 0.25rem; font-size: 2rem; }
+    p.lede { color: var(--muted); margin-top: 0; }
+    h2 { margin-top: 2.25rem; font-size: 1.15rem; }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-fg);
+      padding: 1rem 1.1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font: 0.9rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    code { font: 0.92em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+    .pill {
+      display: inline-block;
+      padding: 0.15rem 0.55rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .cta {
+      display: inline-block;
+      background: var(--accent);
+      color: white !important;
+      padding: 0.55rem 1rem;
+      border-radius: 6px;
+      font-weight: 600;
+      margin-top: 0.5rem;
+    }
+    footer { margin-top: 3rem; color: var(--muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Install GizmoSQL</h1>
+  <p class="lede">A high-performance SQL server built on DuckDB and Apache Arrow Flight SQL.</p>
+
+  <div class="row">
+    <a class="cta" href="https://gizmodata.com/gizmosql/install">Open the installer picker →</a>
+    <span class="pill">latest stable</span>
+    <span class="pill">LTS channel</span>
+  </div>
+
+  <h2>macOS &amp; Linux</h2>
+  <pre><code>curl -fsSL https://install.gizmosql.com/install.sh | sh</code></pre>
+  <p>For the LTS channel:</p>
+  <pre><code>curl -fsSL https://install.gizmosql.com/install.sh | sh -s -- --channel lts</code></pre>
+
+  <h2>Windows (PowerShell)</h2>
+  <pre><code>iwr https://install.gizmosql.com/install.ps1 -OutFile install.ps1; .\install.ps1</code></pre>
+  <p>For the LTS channel:</p>
+  <pre><code>iwr https://install.gizmosql.com/install.ps1 -OutFile install.ps1; .\install.ps1 -Channel lts</code></pre>
+
+  <h2>Other install methods</h2>
+  <ul>
+    <li><a href="https://gizmodata.com/gizmosql/install">Picker on gizmodata.com</a> — Homebrew, Docker, direct download (zip / MSI), and more.</li>
+    <li><a href="https://hub.docker.com/r/gizmodata/gizmosql"><code>gizmodata/gizmosql</code> on Docker Hub</a> (stable)</li>
+    <li><a href="https://hub.docker.com/r/gizmodata/gizmosql-lts"><code>gizmodata/gizmosql-lts</code> on Docker Hub</a> (LTS)</li>
+    <li><a href="https://github.com/gizmodata/gizmosql/releases/latest">All release artifacts on GitHub</a></li>
+  </ul>
+
+  <h2>Inspect the script first</h2>
+  <p>Recommended for any <code>curl … | sh</code> install. View the source:</p>
+  <ul>
+    <li><a href="https://install.gizmosql.com/install.sh"><code>install.sh</code></a> (POSIX)</li>
+    <li><a href="https://install.gizmosql.com/install.ps1"><code>install.ps1</code></a> (PowerShell)</li>
+    <li><a href="https://github.com/gizmodata/gizmosql-install">Repository on GitHub</a></li>
+  </ul>
+
+  <footer>
+    <p>
+      Documentation: <a href="https://docs.gizmosql.com">docs.gizmosql.com</a> ·
+      LTS channel guide: <a href="https://docs.gizmosql.com/#/lts_channel">docs.gizmosql.com/#/lts_channel</a> ·
+      Releases: <a href="https://github.com/gizmodata/gizmosql/releases">github.com/gizmodata/gizmosql/releases</a>
+    </p>
+  </footer>
+</body>
+</html>
