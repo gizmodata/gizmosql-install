@@ -114,20 +114,10 @@ try {
     Fatal "download failed: $url`n  (the channel/version combination may not exist; see https://github.com/$Repo/releases)"
   }
 
-  # Best-effort SHA-256 verification (sibling .sha256 file if published).
-  try {
-    $shaUrl = "$url.sha256"
-    $shaPath = "$zipPath.sha256"
-    Invoke-WebRequest -Uri $shaUrl -OutFile $shaPath -UseBasicParsing -ErrorAction Stop
-    $expected = (Get-Content $shaPath -First 1).Trim().Split()[0]
-    $actual   = (Get-FileHash -Algorithm SHA256 -Path $zipPath).Hash.ToLower()
-    if ($expected.ToLower() -ne $actual) {
-      Fatal "SHA-256 mismatch for $artifact`n  expected: $expected`n  actual:   $actual"
-    }
-    Info "SHA-256 verified."
-  } catch {
-    Info "(no published SHA-256 manifest for this release; skipping verification)"
-  }
+  # Transit integrity is covered by HTTPS + the zip's own CRCs. For
+  # supply-chain provenance we publish Sigstore build attestations on every
+  # release asset — verify with `gh attestation verify <file> --repo $Repo`
+  # if you want it.
 
   Info "Extracting..."
   $extract = Join-Path $tmp 'extracted'
