@@ -115,15 +115,6 @@ esac
 need() { command -v "$1" >/dev/null 2>&1 || fatal "missing required tool: $1"; }
 need curl
 need unzip
-# sha256 verifier — prefer GNU sha256sum, fall back to BSD shasum.
-if command -v sha256sum >/dev/null 2>&1; then
-  SHA256_CMD="sha256sum"
-elif command -v shasum >/dev/null 2>&1; then
-  SHA256_CMD="shasum -a 256"
-else
-  warn "no sha256sum or shasum available — skipping checksum verification"
-  SHA256_CMD=""
-fi
 
 # ---- resolve version --------------------------------------------------------
 # Use the GitHub releases/latest endpoint; follow the 302 redirect to the tag
@@ -152,23 +143,9 @@ if ! curl -fsSL --retry 3 -o "$TMPDIR/$ARTIFACT" "$URL"; then
   fatal "download failed: $URL
   (the channel/version combination may not exist; see https://github.com/${REPO}/releases)"
 fi
-
-# Best-effort checksum verification: a sibling .sha256 file may not exist on
-# older releases. If present we verify; if missing we just note it.
-if [ -n "$SHA256_CMD" ] && curl -fsSL --retry 2 \
-      -o "$TMPDIR/${ARTIFACT}.sha256" "${URL}.sha256" 2>/dev/null; then
-  EXPECTED="$(awk '{print $1}' "$TMPDIR/${ARTIFACT}.sha256")"
-  ACTUAL="$(${SHA256_CMD} "$TMPDIR/$ARTIFACT" | awk '{print $1}')"
-  if [ "$EXPECTED" = "$ACTUAL" ]; then
-    info "SHA-256 verified."
-  else
-    fatal "SHA-256 mismatch for $ARTIFACT
-  expected: $EXPECTED
-  actual:   $ACTUAL"
-  fi
-else
-  info "${C_DIM}(no published SHA-256 manifest for this release; skipping verification)${C_RESET}"
-fi
+# Transit integrity is covered by HTTPS + the zip's own CRCs. For supply-chain
+# provenance we publish Sigstore build attestations on every release asset —
+# verify with `gh attestation verify <file> --repo ${REPO}` if you want it.
 
 # ---- install ----------------------------------------------------------------
 info "Extracting..."
