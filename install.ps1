@@ -64,12 +64,20 @@ function Fatal { param([string]$msg) Write-Host "error: $msg" -ForegroundColor R
 $artifactSuffix = if ($Channel -eq 'lts') { '_lts' } else { '' }
 $binSuffix      = if ($Channel -eq 'lts') { '_lts' } else { '' }
 
-# Only x64 Windows builds are published.
+# Pick the artifact for the machine's native architecture (x64 and arm64
+# builds are published as of v1.30.0). The registry value reflects the real
+# hardware even when this PowerShell session runs emulated (e.g. x64
+# PowerShell on a Windows ARM64 machine, where PROCESSOR_ARCHITECTURE lies).
 $os = 'windows'
-$arch = 'amd64'
-$cpu = $env:PROCESSOR_ARCHITECTURE
-if ($cpu -ne 'AMD64') {
-  Warn "GizmoSQL only ships an x64 Windows build; you appear to be on '$cpu'. Continuing anyway."
+$cpu = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment' -ErrorAction SilentlyContinue).PROCESSOR_ARCHITECTURE
+if (-not $cpu) { $cpu = $env:PROCESSOR_ARCHITECTURE }
+switch ($cpu) {
+  'ARM64' { $arch = 'arm64' }
+  'AMD64' { $arch = 'amd64' }
+  default {
+    Warn "unrecognized architecture '$cpu'; defaulting to the x64 build."
+    $arch = 'amd64'
+  }
 }
 
 # ---- resolve version -------------------------------------------------------
