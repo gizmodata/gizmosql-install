@@ -169,24 +169,43 @@ try {
   Warn "binary installed but '$srv --version' failed; check that you have the right architecture and that Defender hasn't quarantined the file."
 }
 
+# ---- PATH / shadowing checks -----------------------------------------------
+$prefixNorm = $Prefix.TrimEnd('\')
+$onPath = @($env:PATH -split ';' | ForEach-Object { $_.TrimEnd('\') }) -contains $prefixNorm
+
+# An older copy elsewhere on PATH (e.g. from the MSI or a manual unzip)
+# resolves ahead of the one we just installed and would silently shadow it.
+$existing = Get-Command $files[0] -ErrorAction SilentlyContinue
+if ($existing -and $existing.Source -and
+    ((Split-Path $existing.Source).TrimEnd('\') -ne $prefixNorm)) {
+  Warn "another $($files[0]) at $($existing.Source) takes precedence on your PATH and will shadow the copy just installed."
+}
+
 # ---- PATH hint -------------------------------------------------------------
-if (-not $NoPathHint) {
-  $pathParts = $env:PATH -split ';'
-  if ($pathParts -notcontains $Prefix) {
-    Write-Host ""
-    Write-Host "Next step: add $Prefix to your PATH." -ForegroundColor Cyan
-    Write-Host "  For the current session:"
-    Write-Host "    `$env:PATH = '$Prefix;' + `$env:PATH"
-    Write-Host "  Permanently (user-scoped):"
-    Write-Host "    [Environment]::SetEnvironmentVariable('PATH', '$Prefix;' + [Environment]::GetEnvironmentVariable('PATH','User'), 'User')"
-  }
+if (-not $NoPathHint -and -not $onPath) {
+  Write-Host ""
+  Write-Host "Next step: add $Prefix to your PATH." -ForegroundColor Cyan
+  Write-Host "  For the current session:"
+  Write-Host "    `$env:PATH = '$Prefix;' + `$env:PATH"
+  Write-Host "  Permanently (user-scoped):"
+  Write-Host "    [Environment]::SetEnvironmentVariable('PATH', '$Prefix;' + [Environment]::GetEnvironmentVariable('PATH','User'), 'User')"
+}
+
+# Show copy-pasteable commands: bare names when $Prefix is on PATH, full
+# paths otherwise so the examples work as-is in the current session.
+if ($onPath) {
+  $srvCmd = $files[0]
+  $cliCmd = $files[1]
+} else {
+  $srvCmd = "& `"$(Join-Path $Prefix $files[0])`""
+  $cliCmd = "& `"$(Join-Path $Prefix $files[1])`""
 }
 
 Write-Host ""
 Write-Host "Get started:"
-Write-Host "    gizmosql_server${binSuffix}.exe --password tiger" -ForegroundColor White
-Write-Host "    `$env:GIZMOSQL_PASSWORD = 'tiger'; gizmosql_client${binSuffix}.exe"
-Write-Host "    gizmosql_server${binSuffix}.exe --help"
+Write-Host "    $srvCmd --password tiger" -ForegroundColor White
+Write-Host "    `$env:GIZMOSQL_PASSWORD = 'tiger'; $cliCmd"
+Write-Host "    $srvCmd --help"
 Write-Host ""
 Write-Host "Docs:    https://docs.gizmosql.com"
 Write-Host "LTS:     https://docs.gizmosql.com/#/lts_channel"
