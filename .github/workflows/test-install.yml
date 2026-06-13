@@ -1,0 +1,189 @@
+name: Test installers
+
+# Runs the install scripts end-to-end on every supported platform/architecture
+# using native runners: install, start gizmosql_server, connect to it with
+# gizmosql_client, and run a query.
+#
+# Triggers:
+#   - pull_request / push to main: validate script changes before they go live.
+#   - schedule: weekly canary against the latest release, so breakage caused by
+#     a new gizmosql release or a runner-image change is caught even when this
+#     repo is quiet.
+#   - workflow_dispatch: manual run, optionally pinned to a version.
+#   - workflow_call: lets the gizmodata/gizmosql release pipeline gate
+#     publishing a release on all platforms passing — call with the candidate
+#     tag as `version` while the release is still marked as a prerelease, and
+#     promote it to latest only if this workflow succeeds.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'GizmoSQL version to test (e.g. v1.30.0). Empty = latest.'
+        required: false
+        default: ''
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: 'GizmoSQL version to test (e.g. v1.30.0). Empty = latest.'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: Lint scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: shellcheck install.sh
+        run: shellcheck install.sh .github/scripts/e2e-test.sh
+
+      - name: Syntax-check install.sh with dash and bash
+        run: |
+          dash -n install.sh
+          bash -n install.sh
+
+      - name: Parse-check and analyze install.ps1
+        shell: pwsh
+        run: |
+          $tokens = $null; $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD/install.ps1", [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count) { $parseErrors; exit 1 }
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          Invoke-ScriptAnalyzer -Path install.ps1 -Severity Error -EnableExit
+          Invoke-ScriptAnalyzer -Path .github/scripts/e2e-test.ps1 -Severity Error -EnableExit
+
+  test-unix:
+    name: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-amd64
+            runner: ubuntu-latest
+          # Same Debian-family arm64 environment as Raspberry Pi OS.
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+          - platform: macos-arm64
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    env:
+      GZ_VERSION: ${{ inputs.version || '' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install (stable channel, piped like curl | sh)
+        run: sh -s -- ${GZ_VERSION:+--version "$GZ_VERSION"} < install.sh
+
+      - name: 'E2E: server starts, client connects and queries (stable)'
+        run: .github/scripts/e2e-test.sh "$HOME/.local/bin/gizmosql_server" "$HOME/.local/bin/gizmosql_client" 31401
+
+      - name: Install (LTS channel, custom prefix)
+        run: sh -s -- --channel lts --prefix "$RUNNER_TEMP/gz-lts" ${GZ_VERSION:+--version "$GZ_VERSION"} < install.sh
+
+      - name: 'E2E: server starts, client connects and queries (LTS)'
+        run: .github/scripts/e2e-test.sh "$RUNNER_TEMP/gz-lts/gizmosql_server_lts" "$RUNNER_TEMP/gz-lts/gizmosql_client_lts" 31402
+
+      - name: 'UX: PATH hint, full-path examples, and shadowing warning'
+        run: |
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          printf '#!/bin/sh\necho fake\n' > "$RUNNER_TEMP/fakebin/gizmosql_server"
+          chmod +x "$RUNNER_TEMP/fakebin/gizmosql_server"
+          out="$(PATH="$RUNNER_TEMP/fakebin:$PATH" sh -s -- --prefix "$RUNNER_TEMP/gz-ux" ${GZ_VERSION:+--version "$GZ_VERSION"} < install.sh 2>&1)"
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -F "takes precedence on your PATH"
+          printf '%s\n' "$out" | grep -F "Next step: add $RUNNER_TEMP/gz-ux to your PATH"
+          printf '%s\n' "$out" | grep -F "$RUNNER_TEMP/gz-ux/gizmosql_server --password"
+
+      - name: 'UX: a Homebrew-managed copy gets a brew uninstall hint (macOS)'
+        if: runner.os == 'macOS'
+        run: |
+          brew install gizmodata/tap/gizmosql
+          # Use a PATH like a typical user machine: brew's bin first and no
+          # ~/.local/bin (the runner image has ~/.local/bin on PATH, and the
+          # copy installed by the first step would shadow brew's otherwise).
+          out="$(PATH="$(brew --prefix)/bin:/usr/bin:/bin:/usr/sbin:/sbin" sh -s -- --prefix "$RUNNER_TEMP/gz-brew" ${GZ_VERSION:+--version "$GZ_VERSION"} < install.sh 2>&1)"
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -F "takes precedence on your PATH"
+          printf '%s\n' "$out" | grep -F "brew uninstall gizmosql"
+
+  test-windows:
+    name: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-amd64
+            runner: windows-latest
+          - platform: windows-arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      GZ_VERSION: ${{ inputs.version || '' }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install (stable channel, default prefix)
+        run: |
+          $a = @{}; if ($env:GZ_VERSION) { $a.Version = $env:GZ_VERSION }
+          .\install.ps1 @a
+
+      - name: 'E2E: server starts, client connects and queries (stable)'
+        run: |
+          & '.github/scripts/e2e-test.ps1' `
+            -Server (Join-Path $env:LOCALAPPDATA 'Programs\GizmoSQL\gizmosql_server.exe') `
+            -Client (Join-Path $env:LOCALAPPDATA 'Programs\GizmoSQL\gizmosql_client.exe') `
+            -Port 31401
+
+      - name: Install + E2E (LTS channel) under Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $a = @{ Channel = 'lts'; Prefix = (Join-Path $env:RUNNER_TEMP 'gz-lts') }
+          if ($env:GZ_VERSION) { $a.Version = $env:GZ_VERSION }
+          .\install.ps1 @a
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & '.github/scripts/e2e-test.ps1' `
+            -Server (Join-Path $env:RUNNER_TEMP 'gz-lts\gizmosql_server_lts.exe') `
+            -Client (Join-Path $env:RUNNER_TEMP 'gz-lts\gizmosql_client_lts.exe') `
+            -Port 31402
+          exit $LASTEXITCODE
+
+      # The documented one-liner pipes the script into Invoke-Expression, which
+      # can't take parameters — so this only runs when testing the latest.
+      - name: Install via irm | iex form
+        if: inputs.version == ''
+        run: Get-Content -Raw .\install.ps1 | Invoke-Expression
+
+      - name: 'UX: PATH hint, full-path examples, and shadowing warning'
+        run: |
+          $fake = Join-Path $env:RUNNER_TEMP 'fakebin'
+          New-Item -ItemType Directory -Force -Path $fake | Out-Null
+          Set-Content -Path (Join-Path $fake 'gizmosql_server.exe') -Value 'not a real exe'
+          $env:PATH = "$fake;$env:PATH"
+          $prefix = Join-Path $env:RUNNER_TEMP 'gz-ux'
+          $a = @{ Prefix = $prefix }
+          if ($env:GZ_VERSION) { $a.Version = $env:GZ_VERSION }
+          $out = .\install.ps1 @a *>&1 | Out-String
+          Write-Host $out
+          if ($out -notmatch 'takes precedence on your PATH') { throw 'missing shadowing warning' }
+          if ($out -notmatch 'Next step: add') { throw 'missing PATH hint' }
+          if (-not $out.Contains("& `"$prefix\gizmosql_server.exe`" --password")) { throw 'expected full-path get-started examples' }

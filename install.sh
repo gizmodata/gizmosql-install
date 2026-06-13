@@ -77,6 +77,9 @@ case "$CHANNEL" in
   *) fatal "--channel must be 'stable' or 'lts' (got '$CHANNEL')" ;;
 esac
 
+# A trailing slash would break the PATH-membership checks further down.
+PREFIX="${PREFIX%/}"
+
 # Cosmetic suffix that matches the release artifact naming convention
 # (gizmosql_cli_<os>_<arch>.zip vs gizmosql_cli_<os>_<arch>_lts.zip and
 # gizmosql_server vs gizmosql_server_lts).
@@ -185,24 +188,58 @@ else
   warn "binary installed but '$PREFIX/$SRV --version' failed; check that $PREFIX is on the right architecture and not blocked by Gatekeeper/SELinux."
 fi
 
+case ":$PATH:" in
+  *":$PREFIX:"*) ON_PATH=1 ;;
+  *)             ON_PATH=0 ;;
+esac
+
+# An older copy elsewhere on PATH (e.g. installed via Homebrew) resolves ahead
+# of the one we just installed, so running $SRV would silently use the old
+# version. command -v returns the first PATH match — anything other than our
+# copy means ours is shadowed.
+EXISTING="$(command -v "$SRV" 2>/dev/null || true)"
+if [ -n "$EXISTING" ] && [ "$EXISTING" != "$PREFIX/$SRV" ]; then
+  warn "another $SRV at $EXISTING takes precedence on your PATH and will shadow the copy just installed."
+  if command -v brew >/dev/null 2>&1; then
+    BREW_PREFIX="$(brew --prefix 2>/dev/null || true)"
+    if [ -n "$BREW_PREFIX" ]; then
+      case "$EXISTING" in
+        "$BREW_PREFIX"/*)
+          BREW_FORMULA="gizmosql"
+          if [ "$CHANNEL" = "lts" ]; then BREW_FORMULA="gizmosql-lts"; fi
+          warn "that copy is managed by Homebrew; remove it with: brew uninstall $BREW_FORMULA"
+          ;;
+      esac
+    fi
+  fi
+fi
+
 # PATH hint — only print if the prefix isn't already on PATH.
-if [ "$PRINT_PATH_HINT" -eq 1 ]; then
-  case ":$PATH:" in
-    *":$PREFIX:"*) ;;
-    *)
-      printf "\n%sNext step:%s add %s to your PATH. For example:\n" "${C_BOLD}" "${C_RESET}" "$PREFIX"
-      printf "    %sexport PATH=\"%s:\$PATH\"%s\n" "${C_DIM}" "$PREFIX" "${C_RESET}"
-      printf "  (add it to ~/.bashrc, ~/.zshrc, etc. to make it permanent)\n"
-      ;;
-  esac
+if [ "$PRINT_PATH_HINT" -eq 1 ] && [ "$ON_PATH" -eq 0 ]; then
+  printf "\n%sNext step:%s add %s to your PATH. For example:\n" "${C_BOLD}" "${C_RESET}" "$PREFIX"
+  printf "    %sexport PATH=\"%s:\$PATH\"%s\n" "${C_DIM}" "$PREFIX" "${C_RESET}"
+  printf "  (add it to ~/.bashrc, ~/.zshrc, etc. to make it permanent)\n"
+  # Debian-family ~/.profile (incl. Raspberry Pi OS) adds ~/.local/bin to PATH
+  # automatically — but only if the directory existed when the shell started.
+  if [ "$PREFIX" = "$HOME/.local/bin" ] && grep -qs '\.local/bin' "$HOME/.profile"; then
+    printf "  (or just log out and back in: your ~/.profile picks up ~/.local/bin now that it exists)\n"
+  fi
+fi
+
+# Show copy-pasteable commands: bare names when $PREFIX is on PATH, full paths
+# otherwise so the examples work as-is in the current shell.
+if [ "$ON_PATH" -eq 1 ]; then
+  SRV_CMD="$SRV"; CLI_CMD="$CLI"
+else
+  SRV_CMD="$PREFIX/$SRV"; CLI_CMD="$PREFIX/$CLI"
 fi
 
 cat <<EOF
 
 Get started:
-    ${C_BOLD}${SRV} --password tiger${C_RESET}            # in one terminal
-    ${C_BOLD}GIZMOSQL_PASSWORD=tiger ${CLI}${C_RESET}    # in another
-    ${C_BOLD}${SRV} --help${C_RESET}                     # all options
+    ${C_BOLD}${SRV_CMD} --password tiger${C_RESET}            # in one terminal
+    ${C_BOLD}GIZMOSQL_PASSWORD=tiger ${CLI_CMD}${C_RESET}    # in another
+    ${C_BOLD}${SRV_CMD} --help${C_RESET}                     # all options
 
 Docs:    https://docs.gizmosql.com
 LTS:     https://docs.gizmosql.com/#/lts_channel
