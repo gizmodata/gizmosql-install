@@ -83,22 +83,21 @@ switch ($cpu) {
 # ---- resolve version -------------------------------------------------------
 if (-not $Version) {
   Info "Resolving latest GizmoSQL release..."
-  # Follow the redirect from /releases/latest to the tagged release page and
-  # peel the tag off the final URL — avoids needing a GitHub API token.
-  # -ErrorAction Stop matters: hitting the redirect limit raises an error in
-  # both engines, but in Windows PowerShell 5.1 it is non-terminating by
-  # default, which would skip the catch and leave $resp empty.
-  $latestUrl = "https://github.com/$Repo/releases/latest"
-  try {
-    $resp = Invoke-WebRequest -Uri $latestUrl -MaximumRedirection 0 -UseBasicParsing -ErrorAction Stop
-  } catch {
-    $resp = $_.Exception.Response
-  }
+  # Ask /releases/latest where it redirects to and peel the tag off the
+  # Location header — avoids needing a GitHub API token. HttpWebRequest with
+  # AllowAutoRedirect disabled returns the 302 as a normal response in both
+  # Windows PowerShell 5.1 and PowerShell 7+, unlike
+  # Invoke-WebRequest -MaximumRedirection 0, which 5.1 reports as an error
+  # without a usable .Response.
   $loc = $null
-  if ($resp -and $resp.Headers -and $resp.Headers.Location) {
-    $loc = $resp.Headers.Location.ToString()
-  } elseif ($resp -and $resp.Headers['Location']) {
-    $loc = $resp.Headers['Location']
+  try {
+    $req = [System.Net.WebRequest]::Create("https://github.com/$Repo/releases/latest")
+    $req.AllowAutoRedirect = $false
+    $req.UserAgent = 'gizmosql-install'
+    $resp = $req.GetResponse()
+    try { $loc = $resp.Headers['Location'] } finally { $resp.Close() }
+  } catch {
+    $loc = $null
   }
   if (-not $loc) {
     Fatal "could not resolve latest version; pass -Version v1.25.1 explicitly"
