@@ -115,8 +115,12 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install gizmodata/tap/gizmosql
-          out="$(sh -s -- --prefix "$RUNNER_TEMP/gz-brew" ${GZ_VERSION:+--version "$GZ_VERSION"} < install.sh 2>&1)"
+          # Use a PATH like a typical user machine: brew's bin first and no
+          # ~/.local/bin (the runner image has ~/.local/bin on PATH, and the
+          # copy installed by the first step would shadow brew's otherwise).
+          out="$(PATH="$(brew --prefix)/bin:/usr/bin:/bin:/usr/sbin:/sbin" sh -s -- --prefix "$RUNNER_TEMP/gz-brew" ${GZ_VERSION:+--version "$GZ_VERSION"} < install.sh 2>&1)"
           printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -F "takes precedence on your PATH"
           printf '%s\n' "$out" | grep -F "brew uninstall gizmosql"
 
   test-windows:
@@ -140,7 +144,7 @@ jobs:
 
       - name: Install (stable channel, default prefix)
         run: |
-          $a = @(); if ($env:GZ_VERSION) { $a += @('-Version', $env:GZ_VERSION) }
+          $a = @{}; if ($env:GZ_VERSION) { $a.Version = $env:GZ_VERSION }
           .\install.ps1 @a
 
       - name: 'E2E: server starts, client connects and queries (stable)'
@@ -153,8 +157,8 @@ jobs:
       - name: Install + E2E (LTS channel) under Windows PowerShell 5.1
         shell: powershell
         run: |
-          $a = @('-Channel', 'lts', '-Prefix', (Join-Path $env:RUNNER_TEMP 'gz-lts'))
-          if ($env:GZ_VERSION) { $a += @('-Version', $env:GZ_VERSION) }
+          $a = @{ Channel = 'lts'; Prefix = (Join-Path $env:RUNNER_TEMP 'gz-lts') }
+          if ($env:GZ_VERSION) { $a.Version = $env:GZ_VERSION }
           .\install.ps1 @a
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & '.github/scripts/e2e-test.ps1' `
@@ -176,8 +180,8 @@ jobs:
           Set-Content -Path (Join-Path $fake 'gizmosql_server.exe') -Value 'not a real exe'
           $env:PATH = "$fake;$env:PATH"
           $prefix = Join-Path $env:RUNNER_TEMP 'gz-ux'
-          $a = @('-Prefix', $prefix)
-          if ($env:GZ_VERSION) { $a += @('-Version', $env:GZ_VERSION) }
+          $a = @{ Prefix = $prefix }
+          if ($env:GZ_VERSION) { $a.Version = $env:GZ_VERSION }
           $out = .\install.ps1 @a *>&1 | Out-String
           Write-Host $out
           if ($out -notmatch 'takes precedence on your PATH') { throw 'missing shadowing warning' }
