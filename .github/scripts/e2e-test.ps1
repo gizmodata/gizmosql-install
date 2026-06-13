@@ -10,6 +10,12 @@ param(
   [int]$Port = 31400
 )
 
+# GitHub Actions runs PowerShell steps with $ErrorActionPreference = 'stop',
+# which flows into this script. Under Windows PowerShell 5.1 + 2>&1 that
+# turns the client's stderr output while the server is still starting into a
+# terminating error, killing the retry loop — so relax it here.
+$ErrorActionPreference = 'Continue'
+
 $proc = Start-Process -FilePath $Server `
   -ArgumentList @('--password', 'tiger', '--port', "$Port") `
   -PassThru -WindowStyle Hidden
