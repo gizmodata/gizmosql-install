@@ -85,9 +85,12 @@ if (-not $Version) {
   Info "Resolving latest GizmoSQL release..."
   # Follow the redirect from /releases/latest to the tagged release page and
   # peel the tag off the final URL — avoids needing a GitHub API token.
+  # -ErrorAction Stop matters: hitting the redirect limit raises an error in
+  # both engines, but in Windows PowerShell 5.1 it is non-terminating by
+  # default, which would skip the catch and leave $resp empty.
   $latestUrl = "https://github.com/$Repo/releases/latest"
   try {
-    $resp = Invoke-WebRequest -Uri $latestUrl -MaximumRedirection 0 -ErrorAction SilentlyContinue
+    $resp = Invoke-WebRequest -Uri $latestUrl -MaximumRedirection 0 -UseBasicParsing -ErrorAction Stop
   } catch {
     $resp = $_.Exception.Response
   }
