@@ -154,6 +154,30 @@ jobs:
             -Client (Join-Path $env:LOCALAPPDATA 'Programs\GizmoSQL\gizmosql_client.exe') `
             -Port 31401
 
+      # Regression test: re-running the installer while a server from the
+      # previous install is still running must succeed (locked files are
+      # renamed aside), warn about the running process, and sweep the stale
+      # renamed files on the next run after the process exits.
+      - name: 'Upgrade in place while the server is running'
+        run: |
+          $prefix = Join-Path $env:LOCALAPPDATA 'Programs\GizmoSQL'
+          $proc = Start-Process -FilePath (Join-Path $prefix 'gizmosql_server.exe') `
+            -ArgumentList @('--password', 'tiger', '--port', '31403') `
+            -PassThru -WindowStyle Hidden
+          try {
+            $a = @{}; if ($env:GZ_VERSION) { $a.Version = $env:GZ_VERSION }
+            $out = .\install.ps1 @a *>&1 | Out-String
+            Write-Host $out
+            if ($out -notmatch 'restart that process') { throw 'expected a running-process warning' }
+            if (-not (Get-ChildItem (Join-Path $prefix '*.old-*'))) { throw 'expected locked files renamed aside' }
+          } finally {
+            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
+          $proc.WaitForExit()
+          $a = @{}; if ($env:GZ_VERSION) { $a.Version = $env:GZ_VERSION }
+          .\install.ps1 @a
+          if (Get-ChildItem (Join-Path $prefix '*.old-*') -ErrorAction SilentlyContinue) { throw 'stale renamed files were not swept on the next run' }
+
       - name: Install + E2E (LTS channel) under Windows PowerShell 5.1
         shell: powershell
         run: |

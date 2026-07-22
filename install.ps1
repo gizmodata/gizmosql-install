@@ -144,13 +144,33 @@ try {
   # The Windows zip also bundles the VC++ runtime DLLs alongside the exes.
   $dlls = @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')
 
+  # Files renamed aside by a previous upgrade (see below) are deletable once
+  # the process that held them has exited — sweep them now, best effort.
+  Get-ChildItem -Path (Join-Path $Prefix '*.old-*') -ErrorAction SilentlyContinue |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+
+  $movedAside = $false
   foreach ($f in ($files + $dlls)) {
     $src = Join-Path $extract $f
     if (-not (Test-Path $src)) {
       if ($f -in $dlls) { continue }   # DLLs are nice-to-have; exes are required
       Fatal "expected $f in $artifact but it wasn't there"
     }
-    Copy-Item -Path $src -Destination (Join-Path $Prefix $f) -Force
+    $dest = Join-Path $Prefix $f
+    try {
+      Copy-Item -Path $src -Destination $dest -Force
+    } catch [System.IO.IOException] {
+      # A running process (e.g. a gizmosql_server started from a previous
+      # install) has $dest loaded, so it can't be overwritten — but Windows
+      # does allow renaming a loaded image. Move it aside and retry; the
+      # stale copy is deleted by the sweep above on a later run.
+      Move-Item -Path $dest -Destination "$dest.old-$([Guid]::NewGuid().ToString('N'))" -Force
+      Copy-Item -Path $src -Destination $dest -Force
+      $movedAside = $true
+    }
+  }
+  if ($movedAside) {
+    Warn "a running GizmoSQL process was holding files in $Prefix; the new version is installed, but restart that process to pick it up."
   }
 } finally {
   Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
