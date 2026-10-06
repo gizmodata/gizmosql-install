@@ -11,6 +11,8 @@ Served from <https://install.gizmosql.com> via GitHub Pages.
 curl -fsSL https://install.gizmosql.com/install.sh | sh
 # or, for the LTS channel:
 curl -fsSL https://install.gizmosql.com/install.sh | sh -s -- --channel lts
+# or, for the edge channel (DuckDB pre-release; experimental, not for production):
+curl -fsSL https://install.gizmosql.com/install.sh | sh -s -- --channel edge
 ```
 
 **Windows (PowerShell)**
@@ -20,6 +22,8 @@ iwr https://install.gizmosql.com/install.ps1 -OutFile install.ps1
 .\install.ps1
 # or, for the LTS channel:
 .\install.ps1 -Channel lts
+# or, for the edge channel (experimental):
+.\install.ps1 -Channel edge
 ```
 
 Pass `--help` (sh) or `Get-Help .\install.ps1` (ps1) for all options
@@ -37,9 +41,8 @@ Pass `--help` (sh) or `Get-Help .\install.ps1` (ps1) for all options
 | `.github/scripts/e2e-test.*` | Shared smoke test: start `gizmosql_server`, connect with `gizmosql_client`, run a query. |
 
 The scripts download the matching release zip from
-<https://github.com/gizmodata/gizmosql/releases>, optionally verify a
-sibling `.sha256` file if published, and install
-`gizmosql_server[_lts]` + `gizmosql_client[_lts]` to a writable prefix
+<https://github.com/gizmodata/gizmosql/releases> and install
+`gizmosql_server[_lts|_edge]` + `gizmosql_client[_lts|_edge]` to a writable prefix
 (default `~/.local/bin` on POSIX, `%LOCALAPPDATA%\Programs\GizmoSQL`
 on Windows).
 
@@ -56,7 +59,7 @@ runners for every supported platform/architecture:
 | windows/amd64   | `windows-latest`   |
 | windows/arm64   | `windows-11-arm`   |
 
-Each platform installs both channels (stable + LTS), then runs a true
+Each platform installs all three channels (stable, LTS and edge), then runs a true
 end-to-end check: start `gizmosql_server`, connect with `gizmosql_client`,
 and verify `SELECT 1` returns. It also asserts the installer UX: the PATH
 hint, full-path "Get started" examples when the prefix is off PATH, and the

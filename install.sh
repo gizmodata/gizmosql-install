@@ -8,7 +8,10 @@
 # how to add that directory to your PATH if it isn't already.
 #
 # Options (pass via `sh -s -- <args>` when piping):
-#   --channel stable|lts   Pick the stable (default) or LTS release channel.
+#   --channel stable|lts|edge
+#                          Pick the release channel: stable (default), LTS, or
+#                          edge (EXPERIMENTAL: a DuckDB pre-release, today
+#                          DuckDB 2.0; not for production workloads).
 #   --version vX.Y.Z       Install a specific GizmoSQL version. Default: latest.
 #   --prefix /path/to/bin  Where to install the executables. Default: ~/.local/bin.
 #                          /usr/local/bin works too but usually needs sudo.
@@ -18,11 +21,13 @@
 # Examples:
 #   curl -fsSL https://install.gizmosql.com/install.sh | sh
 #   curl -fsSL https://install.gizmosql.com/install.sh | sh -s -- --channel lts
+#   curl -fsSL https://install.gizmosql.com/install.sh | sh -s -- --channel edge
 #   curl -fsSL https://install.gizmosql.com/install.sh | sh -s -- --version v1.25.1 --prefix /usr/local/bin
 #
 # Source: https://github.com/gizmodata/gizmosql-install
 # Releases: https://github.com/gizmodata/gizmosql/releases
 # Channel guide: https://docs.gizmosql.com/#/lts_channel
+# Edge channel:  https://docs.gizmosql.com/#/edge_channel
 
 set -eu
 
@@ -73,22 +78,19 @@ while [ $# -gt 0 ]; do
 done
 
 case "$CHANNEL" in
-  stable|lts) ;;
-  *) fatal "--channel must be 'stable' or 'lts' (got '$CHANNEL')" ;;
+  stable|lts|edge) ;;
+  *) fatal "--channel must be 'stable', 'lts' or 'edge' (got '$CHANNEL')" ;;
 esac
 
 # A trailing slash would break the PATH-membership checks further down.
 PREFIX="${PREFIX%/}"
 
-# Cosmetic suffix that matches the release artifact naming convention
-# (gizmosql_cli_<os>_<arch>.zip vs gizmosql_cli_<os>_<arch>_lts.zip and
-# gizmosql_server vs gizmosql_server_lts).
-if [ "$CHANNEL" = "lts" ]; then
-  ARTIFACT_CHANNEL_SUFFIX="_lts"
-  BIN_CHANNEL_SUFFIX="_lts"
+# Suffix that matches the release artifact naming convention
+# (gizmosql_cli_<os>_<arch>[_lts|_edge].zip and gizmosql_server[_lts|_edge]).
+if [ "$CHANNEL" = "stable" ]; then
+  CHANNEL_SUFFIX=""
 else
-  ARTIFACT_CHANNEL_SUFFIX=""
-  BIN_CHANNEL_SUFFIX=""
+  CHANNEL_SUFFIX="_${CHANNEL}"
 fi
 
 # ---- platform detection -----------------------------------------------------
@@ -133,9 +135,12 @@ if [ -z "$VERSION" ]; then
   esac
 fi
 info "GizmoSQL ${C_BOLD}${VERSION}${C_RESET} (${CHANNEL} channel) for ${OS}/${ARCH}"
+if [ "$CHANNEL" = "edge" ]; then
+  warn "the edge channel is EXPERIMENTAL and NOT for production workloads: it runs on a DuckDB pre-release, and database files it creates can't be opened by the stable or LTS channels. See https://docs.gizmosql.com/#/edge_channel"
+fi
 
 # ---- download ---------------------------------------------------------------
-ARTIFACT="gizmosql_cli_${OS}_${ARCH}${ARTIFACT_CHANNEL_SUFFIX}.zip"
+ARTIFACT="gizmosql_cli_${OS}_${ARCH}${CHANNEL_SUFFIX}.zip"
 URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARTIFACT}"
 
 TMPDIR="$(mktemp -d 2>/dev/null || mktemp -d -t gizmosql-install)"
@@ -157,8 +162,8 @@ unzip -q -o "$TMPDIR/$ARTIFACT" -d "$TMPDIR/extracted"
 mkdir -p "$PREFIX" || fatal "could not create $PREFIX (try --prefix /writable/dir)"
 [ -w "$PREFIX" ] || fatal "$PREFIX is not writable (try --prefix \$HOME/.local/bin or run with sudo)"
 
-SRV="gizmosql_server${BIN_CHANNEL_SUFFIX}"
-CLI="gizmosql_client${BIN_CHANNEL_SUFFIX}"
+SRV="gizmosql_server${CHANNEL_SUFFIX}"
+CLI="gizmosql_client${CHANNEL_SUFFIX}"
 
 for f in "$SRV" "$CLI"; do
   if [ ! -f "$TMPDIR/extracted/$f" ]; then
@@ -206,7 +211,7 @@ if [ -n "$EXISTING" ] && [ "$EXISTING" != "$PREFIX/$SRV" ]; then
       case "$EXISTING" in
         "$BREW_PREFIX"/*)
           BREW_FORMULA="gizmosql"
-          if [ "$CHANNEL" = "lts" ]; then BREW_FORMULA="gizmosql-lts"; fi
+          if [ "$CHANNEL" != "stable" ]; then BREW_FORMULA="gizmosql-${CHANNEL}"; fi
           warn "that copy is managed by Homebrew; remove it with: brew uninstall $BREW_FORMULA"
           ;;
       esac
@@ -243,5 +248,6 @@ Get started:
 
 Docs:    https://docs.gizmosql.com
 LTS:     https://docs.gizmosql.com/#/lts_channel
+Edge:    https://docs.gizmosql.com/#/edge_channel
 Issues:  https://github.com/${REPO}/issues
 EOF

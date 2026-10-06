@@ -100,6 +100,16 @@ jobs:
       - name: 'E2E: server starts, client connects and queries (LTS)'
         run: .github/scripts/e2e-test.sh "$RUNNER_TEMP/gz-lts/gizmosql_server_lts" "$RUNNER_TEMP/gz-lts/gizmosql_client_lts" 31402
 
+      - name: Install (edge channel, custom prefix)
+        run: |
+          out="$(sh -s -- --channel edge --prefix "$RUNNER_TEMP/gz-edge" ${GZ_VERSION:+--version "$GZ_VERSION"} < install.sh 2>&1)"
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -F "edge channel is EXPERIMENTAL"
+          "$RUNNER_TEMP/gz-edge/gizmosql_server_edge" --version | grep -F -- "-EDGE"
+
+      - name: 'E2E: server starts, client connects and queries (edge)'
+        run: .github/scripts/e2e-test.sh "$RUNNER_TEMP/gz-edge/gizmosql_server_edge" "$RUNNER_TEMP/gz-edge/gizmosql_client_edge" 31404
+
       - name: 'UX: PATH hint, full-path examples, and shadowing warning'
         run: |
           mkdir -p "$RUNNER_TEMP/fakebin"
@@ -189,6 +199,22 @@ jobs:
             -Server (Join-Path $env:RUNNER_TEMP 'gz-lts\gizmosql_server_lts.exe') `
             -Client (Join-Path $env:RUNNER_TEMP 'gz-lts\gizmosql_client_lts.exe') `
             -Port 31402
+          exit $LASTEXITCODE
+
+      - name: Install + E2E (edge channel)
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP 'gz-edge'
+          $a = @{ Channel = 'edge'; Prefix = $prefix }
+          if ($env:GZ_VERSION) { $a.Version = $env:GZ_VERSION }
+          $out = .\install.ps1 @a *>&1 | Out-String
+          Write-Host $out
+          if ($out -notmatch 'edge channel is EXPERIMENTAL') { throw 'missing edge-channel warning' }
+          $reported = & (Join-Path $prefix 'gizmosql_server_edge.exe') --version 2>&1 | Out-String
+          if ($reported -notmatch '-EDGE') { throw "expected an -EDGE version, got: $reported" }
+          & '.github/scripts/e2e-test.ps1' `
+            -Server (Join-Path $prefix 'gizmosql_server_edge.exe') `
+            -Client (Join-Path $prefix 'gizmosql_client_edge.exe') `
+            -Port 31404
           exit $LASTEXITCODE
 
       # The documented one-liner pipes the script into Invoke-Expression, which
