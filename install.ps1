@@ -15,7 +15,9 @@
         .\install.ps1 -Channel lts
 
 .PARAMETER Channel
-    Release channel: stable (default) or lts.
+    Release channel: stable (default), lts, or edge. Edge is EXPERIMENTAL:
+    it runs on a DuckDB pre-release (today DuckDB 2.0) and is not meant for
+    production workloads.
 
 .PARAMETER Version
     Install a specific version, e.g. v1.25.1. Defaults to the latest release.
@@ -32,17 +34,20 @@
 .EXAMPLE
     .\install.ps1 -Channel lts
 .EXAMPLE
+    .\install.ps1 -Channel edge
+.EXAMPLE
     .\install.ps1 -Version v1.25.1 -Prefix "$env:USERPROFILE\bin"
 
 .LINK
     Source:        https://github.com/gizmodata/gizmosql-install
     Releases:      https://github.com/gizmodata/gizmosql/releases
     Channel guide: https://docs.gizmosql.com/#/lts_channel
+    Edge channel:  https://docs.gizmosql.com/#/edge_channel
 #>
 
 [CmdletBinding()]
 param(
-  [ValidateSet('stable', 'lts')]
+  [ValidateSet('stable', 'lts', 'edge')]
   [string]$Channel = 'stable',
 
   [string]$Version = '',
@@ -61,8 +66,8 @@ function Warn  { param([string]$msg) Write-Warning $msg }
 function Fatal { param([string]$msg) Write-Host "error: $msg" -ForegroundColor Red; exit 1 }
 
 # ---- artifact naming -------------------------------------------------------
-$artifactSuffix = if ($Channel -eq 'lts') { '_lts' } else { '' }
-$binSuffix      = if ($Channel -eq 'lts') { '_lts' } else { '' }
+# gizmosql_cli_windows_<arch>[_lts|_edge].zip -> gizmosql_server[_lts|_edge].exe
+$channelSuffix = if ($Channel -eq 'stable') { '' } else { "_$Channel" }
 
 # Pick the artifact for the machine's native architecture (x64 and arm64
 # builds are published as of v1.30.0). The registry value reflects the real
@@ -108,9 +113,12 @@ if (-not $Version) {
   }
 }
 Info "GizmoSQL $Version ($Channel channel) for $os/$arch"
+if ($Channel -eq 'edge') {
+  Warn "the edge channel is EXPERIMENTAL and NOT for production workloads: it runs on a DuckDB pre-release, and database files it creates can't be opened by the stable or LTS channels. See https://docs.gizmosql.com/#/edge_channel"
+}
 
 # ---- download --------------------------------------------------------------
-$artifact = "gizmosql_cli_${os}_${arch}${artifactSuffix}.zip"
+$artifact = "gizmosql_cli_${os}_${arch}${channelSuffix}.zip"
 $url      = "https://github.com/$Repo/releases/download/$Version/$artifact"
 
 $tmp = New-Item -ItemType Directory -Path (Join-Path $env:TEMP "gizmosql-install-$([Guid]::NewGuid())") | Select-Object -ExpandProperty FullName
@@ -138,8 +146,8 @@ try {
   }
 
   $files = @(
-    "gizmosql_server${binSuffix}.exe",
-    "gizmosql_client${binSuffix}.exe"
+    "gizmosql_server${channelSuffix}.exe",
+    "gizmosql_client${channelSuffix}.exe"
   )
   # The Windows zip also bundles the VC++ runtime DLLs alongside the exes.
   $dlls = @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')
@@ -231,4 +239,5 @@ Write-Host "    $srvCmd --help"
 Write-Host ""
 Write-Host "Docs:    https://docs.gizmosql.com"
 Write-Host "LTS:     https://docs.gizmosql.com/#/lts_channel"
+Write-Host "Edge:    https://docs.gizmosql.com/#/edge_channel"
 Write-Host "Issues:  https://github.com/$Repo/issues"
